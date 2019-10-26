@@ -28,15 +28,17 @@ steps:
 # Compile and upload compiled pipelines to the KFP cluster
 - name: 'gcr.io/cloud-builders/gcloud'
   args: ['container', 'clusters', 'get-credentials', '$_CLUSTER_NAME', '--zone', '$_ZONE']
+  
 - name: 'gcr.io/$PROJECT_ID/tfx-cli'
-  entrypoint: '/bin/bash'
-  args: 
-  - '-c'
-  - |
-    tfx pipeline create --pipeline_path $_PIPELINE_DSL 
-  env: ['KUBEFLOW_TFX_IMAGE=gcr.io/$PROJECT_ID/$_TFX_CUSTOM_IMAGE:$_TAG']
+  args: ['pipeline', 'compile', '--pipeline_path', '$_PIPELINE_DSL']
+  env: 
+  - 'PIPELINE_IMAGE=gcr.io/$PROJECT_ID/$_PIPELINE_IMAGE:$_TAG'
+  - 'PROJECT_ID=$PROJECT_ID'
+  - 'PIPELINE_NAME=$_PIPELINE_NAME'
+  - 'GCP_REGION=$_GCP_REGION'
+  - 'ARTIFACT_STORE_BUCKET=$_ARTIFACT_STORE_BUCKET'
   dir: $_PIPELINE_FOLDER
 
 
 # Push the custom image to Container Registry 
-images: ['gcr.io/$PROJECT_ID/$_TFX_CUSTOM_IMAGE']
+images: ['gcr.io/$PROJECT_ID/$_PIPELINE_IMAGE:$_TAG']

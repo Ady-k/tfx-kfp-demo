@@ -17,9 +17,12 @@
 # the pipelines and pipelines components 
 
 SUBSTITUTIONS=\
+_PIPELINE_NAME=online_news_training_pipeline,\
+_PIPELINE_IMAGE=online_news_training_pipeline,\
+_GCP_REGION=us-central1,\
+_ARTIFACT_STORE_BUCKET=gs://tfw-demo-artifact-store,\
 _PIPELINE_FOLDER=online_news,\
-_PIPELINE_DSL=online_news_pipeline.py,\
-_PIPELINE_IMAGE=online_news_pipeline,\
+_PIPELINE_DSL=pipeline_dsl.py,\
 _TAG=latest,\
 _CLUSTER_NAME=tfw-demo-kfp-cluster,\
 _ZONE=us-central1-a

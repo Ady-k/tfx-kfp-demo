@@ -4,4 +4,4 @@ RUN RELEASE=0.1.32 \
 
 ENV LC_ALL=C.UTF-8 LANG=C.UTF-8
 
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["tfx"]

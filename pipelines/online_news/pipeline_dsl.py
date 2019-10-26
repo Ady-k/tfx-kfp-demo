@@ -17,7 +17,7 @@ import tempfile
 import tensorflow as tf
 import tfx
 import urllib
-import yaml
+
 
 from tfx.components.base import executor_spec
 from tfx.components.evaluator.component import Evaluator
@@ -40,7 +40,6 @@ from tfx.extensions.google_cloud_ai_platform.trainer import executor as ai_platf
 from tfx.extensions.google_cloud_ai_platform.pusher import executor as ai_platform_pusher_executor  
 from tfx.utils.dsl_utils import external_input
 from typing import Dict, List, Text
-
 
 def _create_pipeline(
     pipeline_name: Text, 
@@ -124,21 +123,19 @@ def _create_pipeline(
 if __name__ == '__main__':
     
   # Configure pipeline settings
-  settings = yaml.safe_load(pathlib.Path('settings.yaml').read_text())
     
-  # GCP project and region to be used by AI Platform services
-  _project_id = settings['environment']['project_id']
-  _gcp_region = settings['environment']['region']
+  # Get settings from environment variables
+  _pipeline_name = os.environ.get('PIPELINE_NAME', 'online_news_training_pipeline')
+  _project_id = os.environ.get('PROJECT_ID', 'jk-tfw-demo')
+  _gcp_region = os.environ.get('GCP_REGION', 'us-central1')
+  _pipeline_image = os.environ.get('PIPELINE_IMAGE', 'gcr.io/jk-tfw-demo/online-news-pipeline')
  
-
   # Artifact store settings
-  _pipeline_name = settings['pipeline']['name']
-  _artifact_store_bucket = settings['environment']['artifact_store']
+  _artifact_store_bucket = os.environ.get('ARTIFACT_STORE_BUCKET', 'tfw-demo-pipeline')
   _pipeline_root = 'gs://{}/{}/'.format(_artifact_store_bucket, _pipeline_name)
   _gcs_data_root = 'gs://{}/{}/'.format(_artifact_store_bucket, 'data')
  
   # AI Platform Training settings
-  _pipeline_image = settings['pipeline']['pipeline_image']
   _ai_platform_training_args = {
     'project': _project_id,
     'region': _gcp_region,
