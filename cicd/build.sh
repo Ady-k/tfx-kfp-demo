@@ -17,11 +17,12 @@
 # the pipelines and pipelines components 
 
 SUBSTITUTIONS=\
+_PIPELINE_FOLDER=online_news,\
 _PIPELINE_DSL=online_news_pipeline.py,\
-_TFX_CUSTOM_IMAGE=,\
+_PIPELINE_IMAGE=online_news_pipeline,\
 _TAG=latest,\
 _CLUSTER_NAME=tfw-demo-kfp-cluster,\
 _ZONE=us-central1-a
 
-gcloud builds submit online_news --config cloudbuild.yaml --substitutions $SUBSTITUTIONS
+gcloud builds submit ../pipelines --config cloudbuild.yaml --substitutions $SUBSTITUTIONS
 
