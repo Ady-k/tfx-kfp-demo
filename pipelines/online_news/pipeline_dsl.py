@@ -149,7 +149,7 @@ if __name__ == '__main__':
   }
     
   # Dataflow settings.
-  _beam_tmp_folder = '{}/beam/tmp'.format(_artifact_store_bucket)
+  _beam_tmp_folder = 'gs://{}/beam/tmp'.format(_artifact_store_bucket)
   _beam_pipeline_args = [
     '--runner=DataflowRunner',
     '--experiments=shuffle_mode=auto',
