@@ -1,0 +1,7 @@
+pipeline:
+  name: online_news_training
+  pipeline_image: gcr.io/jk-tfw-demo/online_news_pipeline:latest
+environment:
+  project_id: jk-tfw-demo
+  region: us-central1
+  artifact_store: gs://tfw-demo-artifact-store

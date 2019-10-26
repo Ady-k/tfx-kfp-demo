@@ -10,14 +10,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import tempfile
-import urllib
-
-import tensorflow as tf
-
-import tfx
 import kfp
+import os
+import pathlib
+import tempfile
+import tensorflow as tf
+import tfx
+import urllib
+import yaml
+
+from tfx.components.base import executor_spec
 from tfx.components.evaluator.component import Evaluator
 from tfx.components.example_gen.csv_example_gen.component import CsvExampleGen
 from tfx.components.example_validator.component import ExampleValidator
@@ -30,26 +32,23 @@ from tfx.components.transform.component import Transform
 from tfx.proto import evaluator_pb2
 from tfx.proto import pusher_pb2
 from tfx.proto import trainer_pb2
-
 from tfx.orchestration import metadata
 from tfx.orchestration import pipeline
 from tfx.orchestration.kubeflow import kubeflow_dag_runner
 from tfx.orchestration.kubeflow.proto import kubeflow_pb2
-
-from tfx.extensions.google_cloud_ai_platform.trainer import executor as ai_platform_trainer_executor  # pylint: disable=g-import-not-at-top
-from tfx.extensions.google_cloud_ai_platform.pusher import executor as ai_platform_pusher_executor  # pylint: disable=g-import-not-at-top
-
+from tfx.extensions.google_cloud_ai_platform.trainer import executor as ai_platform_trainer_executor  
+from tfx.extensions.google_cloud_ai_platform.pusher import executor as ai_platform_pusher_executor  
 from tfx.utils.dsl_utils import external_input
-
-from tfx.components.base import executor_spec
-
 from typing import Dict, List, Text
+
 
 def _create_pipeline(
     pipeline_name: Text, 
     pipeline_root: Text, 
     data_root: Text,
     module_file: Text,
+    ai_platform_training_args: Dict[Text, Text],
+    ai_platform_serving_args: Dict[Text, Text],
     beam_pipeline_args: List[Text]) -> pipeline.Pipeline:
   """Implements the online news pipeline with TFX."""
 
@@ -69,7 +68,7 @@ def _create_pipeline(
   validate_stats = ExampleValidator(
       stats=statistics_gen.outputs.output, schema=infer_schema.outputs.output)
 
-# Performs transformations and feature engineering in training and serving.
+  # Performs transformations and feature engineering in training and serving.
   transform = Transform(
       input_data=example_gen.outputs.examples,
       schema=infer_schema.outputs.output,
@@ -78,14 +77,17 @@ def _create_pipeline(
   # Uses user-provided Python function that implements a model using
   # TensorFlow's Estimators API.
   trainer = Trainer(
+      custom_executor_spec=executor_spec.ExecutorClassSpec(
+          ai_platform_trainer_executor.Executor),
       module_file=module_file,
       transformed_examples=transform.outputs.transformed_examples,
       schema=infer_schema.outputs.output,
       transform_output=transform.outputs.transform_output,
       train_args=trainer_pb2.TrainArgs(num_steps=10000),
-      eval_args=trainer_pb2.EvalArgs(num_steps=5000))
+      eval_args=trainer_pb2.EvalArgs(num_steps=5000),
+      custom_config={'ai_platform_training_args': ai_platform_training_args})
 
-# Uses TFMA to compute a evaluation statistics over features of a model.
+  # Uses TFMA to compute a evaluation statistics over features of a model.
   model_analyzer = Evaluator(
       examples=example_gen.outputs.examples,
       model_exports=trainer.outputs.output,
@@ -98,12 +100,21 @@ def _create_pipeline(
   model_validator = ModelValidator(
       examples=example_gen.outputs.examples, model=trainer.outputs.output)
 
+  # Checks whether the model passed the validation steps and pushes the model
+  # to a file destination if check passed.
+  pusher = Pusher(
+      custom_executor_spec=executor_spec.ExecutorClassSpec(
+         ai_platform_pusher_executor.Executor),
+      model_export=trainer.outputs.output,
+      model_blessing=model_validator.outputs.blessing,
+      custom_config={'ai_platform_serving_args': ai_platform_serving_args})
+
   return pipeline.Pipeline(
       pipeline_name=pipeline_name,
       pipeline_root=pipeline_root,
       components=[
           example_gen, statistics_gen, infer_schema, validate_stats, transform,
-          trainer, model_analyzer, model_validator
+          trainer, model_analyzer #, model_validator, pusher
       ],
       # enable_cache=True,
       beam_pipeline_args=beam_pipeline_args
@@ -111,37 +122,67 @@ def _create_pipeline(
 
 
 if __name__ == '__main__':
+    
+  # Configure pipeline settings
+  settings = yaml.safe_load(pathlib.Path('settings.yaml').read_text())
+    
   # GCP project and region to be used by AI Platform services
-  _project_id = 'jk-debug1'
-  _gcp_region = 'us-central1'
+  _project_id = settings['environment']['project_id']
+  _gcp_region = settings['environment']['region']
  
-  # Connection setting to Cloud SQL based ML Metadata
+
+  # Artifact store settings
+  _pipeline_name = settings['pipeline']['name']
+  _artifact_store_bucket = settings['environment']['artifact_store']
+  _pipeline_root = 'gs://{}/{}/'.format(_artifact_store_bucket, _pipeline_name)
+  _gcs_data_root = 'gs://{}/{}/'.format(_artifact_store_bucket, 'data')
+ 
+  # AI Platform Training settings
+  _pipeline_image = settings['pipeline']['pipeline_image']
+  _ai_platform_training_args = {
+    'project': _project_id,
+    'region': _gcp_region,
+    'masterConfig': _pipeline_image
+  }
+    
+  # AI Platform Prediction settings
+  _ai_platform_serving_args = {
+    'model_name': 'model_'+_pipeline_name,
+    'project_id': _project_id,
+  }
+    
+  # Dataflow settings.
+  _beam_tmp_folder = '{}/beam/tmp'.format(_artifact_store_bucket)
+  _beam_pipeline_args = [
+    '--runner=DataflowRunner',
+    '--experiments=shuffle_mode=auto',
+    '--project=' + _project_id,
+    '--temp_location=' + _beam_tmp_folder,
+    '--region=' + _gcp_region,
+  ]
+
+  # ML Metadata settings
   _metadata_config = kubeflow_pb2.KubeflowMetadataConfig()
   _metadata_config.mysql_db_service_host.environment_variable = 'MYSQL_SERVICE_HOST'
   _metadata_config.mysql_db_service_port.environment_variable = 'MYSQL_SERVICE_PORT'
   _metadata_config.mysql_db_name.value = 'metadb'
   _metadata_config.mysql_db_user.value = 'root' 
   _metadata_config.mysql_db_password.value = ''
-  
-  # GCS folder to be used to output the artifacts generated by the pipeline
-  _pipeline_name = 'online_news_pipeline_2'
-  _artifact_store_bucket = 'kfpenv-artifact-store'
-  _pipeline_root = 'gs://{}/{}/'.format(_artifact_store_bucket, _pipeline_name)
 
-  # GCS data root
-  _gcs_data_root = 'gs://{}/{}/'.format(_artifact_store_bucket, 'data')
- 
-  # GCS path to module file
-  _gcs_module_file = 'gs://{}/{}/{}'.format(_artifact_store_bucket, 'module', 'modules.py')
 
+  # Compile the pipeline
   runner_config = kubeflow_dag_runner.KubeflowDagRunnerConfig(
-      kubeflow_metadata_config=_metadata_config
+      kubeflow_metadata_config=_metadata_config,
+      tfx_image=_pipeline_image
   )
 
+  _module_file = 'modules/transform_train.py'
   kubeflow_dag_runner.KubeflowDagRunner(config=runner_config).run(
       _create_pipeline(
           pipeline_name=_pipeline_name,
           pipeline_root=_pipeline_root,
           data_root=_gcs_data_root,
-          module_file=_gcs_module_file,
-          beam_pipeline_args=[]))
+          module_file=_module_file,
+          ai_platform_training_args=_ai_platform_training_args,
+          ai_platform_serving_args=_ai_platform_serving_args,
+          beam_pipeline_args=_beam_pipeline_args))
