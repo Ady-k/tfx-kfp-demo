@@ -102,3 +102,14 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+*.tar.gz
+
+application_default_credentials.json
+mysql-credential.env
+gcp-configs.env
+
+test.yaml
+.terraform
+.vscode
+
