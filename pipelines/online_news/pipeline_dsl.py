@@ -139,7 +139,9 @@ if __name__ == '__main__':
   _ai_platform_training_args = {
     'project': _project_id,
     'region': _gcp_region,
-    'masterConfig': _pipeline_image
+    'masterConfig': {
+        'imageUri': _pipeline_image,
+    }
   }
     
   # AI Platform Prediction settings
