@@ -30,12 +30,11 @@ steps:
   args: ['container', 'clusters', 'get-credentials', '$_CLUSTER_NAME', '--zone', '$_ZONE']
   
 - name: 'gcr.io/$PROJECT_ID/tfx-cli'
-  args: ['pipeline', 'update', '--pipeline_path', '$_PIPELINE_DSL']
+  args: ['pipeline', 'create', '--pipeline_path', '$_PIPELINE_DSL']
   env: 
   - 'PIPELINE_IMAGE=gcr.io/$PROJECT_ID/$_PIPELINE_IMAGE:$TAG_NAME'
   - 'PROJECT_ID=$PROJECT_ID'
-  # - 'PIPELINE_NAME=${_PIPELINE_NAME}_${TAG_NAME}'
-  - 'PIPELINE_NAME=${_PIPELINE_NAME}'
+  - 'PIPELINE_NAME=${_PIPELINE_NAME}_${TAG_NAME}'
   - 'GCP_REGION=$_GCP_REGION'
   - 'ARTIFACT_STORE_BUCKET=$_ARTIFACT_STORE_BUCKET'
   dir: $_PIPELINE_FOLDER
